@@ -63,9 +63,7 @@ public class GradientDescent implements IFFNeuralNetTrainer {
         validationAccHistory = new double[MAX_EPOCH];
         epochs = new double[MAX_EPOCH];
 
-        for (int i = 0; i < epochs.length; i++) {
-            epochs[i] = i + 1;
-        }
+       
     }
 
     @Override

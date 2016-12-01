@@ -66,9 +66,9 @@ public class Graph {
 
         //set some graph properties
         //Terminal
-        //properties.add("set terminal postscript eps enhanced color font 'Helvetica,16'");
+        properties.add("set terminal postscript eps enhanced color font 'Helvetica,20'");
         //Output
-        //properties.add("set output '" + ".\\" + path + "\\" + title + "\\" + title + ".eps'");
+        properties.add("set output '" + ".\\" + path + "\\" + title + "\\" + title + ".eps'");
         //Title
         properties.add("set title '" + title + "'");
 

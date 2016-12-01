@@ -2,7 +2,7 @@ package ac.up.cos711.rbfnntraining.data;
 
 import ac.up.cos711.rbfnntraining.data.util.GraphException;
 import ac.up.cos711.rbfnntraining.data.util.ResultsException;
-import ac.up.cos711.rbfnntraining.experiment.Experiment;
+import ac.up.cos711.rbfnntraining.experiment.GDExperiment;
 import ac.up.cos711.rbfnntraining.function.Function;
 import ac.up.cos711.rbfnntraining.function.problem.RealProblem;
 import java.io.BufferedWriter;
@@ -14,7 +14,7 @@ import java.io.IOException;
  * Allows for experiment data to be written to file and/or directly transformed
  * into plots using GNUPlot. To support multi-threaded experiments and still
  * maintain separation of concerns, this class handles communication with 
- * {@linkGraph} behalf of the {@link Experiment} class.
+ * {@linkGraph} behalf of the {@link GDExperiment} class.
  *
  * @author Abrie van Aardt
  */
@@ -107,7 +107,7 @@ public class Results {
         }
     }
 
-    public static void newGraph(Experiment experiment, String path, String title, String xLabel, String yLabel, String zLabel, int dimensions)
+    public static void newGraph(GDExperiment experiment, String path, String title, String xLabel, String yLabel, String zLabel, int dimensions)
             throws ResultsException {
         try {
             experiment.graph = new Graph(path, title, xLabel, yLabel, zLabel, dimensions);
@@ -117,7 +117,7 @@ public class Results {
         }
     }
 
-    public static void addPlot(Experiment experiment, String title, RealProblem problem)
+    public static void addPlot(GDExperiment experiment, String title, RealProblem problem)
             throws ResultsException {
         try {
             experiment.graph.addPlot(title, problem);
@@ -127,7 +127,7 @@ public class Results {
         }
     }
 
-    public static void addPlot(Experiment experiment, String title, Function function, int lowerbound, int upperbound)
+    public static void addPlot(GDExperiment experiment, String title, Function function, int lowerbound, int upperbound)
             throws ResultsException {
         try {
             experiment.graph.addPlot(title, function, lowerbound, upperbound);
@@ -137,7 +137,7 @@ public class Results {
         }
     }
 
-    public static void addPlot(Experiment experiment, String title, double[] xData, double[] yData, String type)
+    public static void addPlot(GDExperiment experiment, String title, double[] xData, double[] yData, String type)
             throws ResultsException {
         try {
             experiment.graph.addPlot(title, xData, yData, type);
@@ -147,7 +147,7 @@ public class Results {
         }
     }
 
-    public static void addPlot(Experiment experiment, String title, double[][] xData, double[] yData, String type)
+    public static void addPlot(GDExperiment experiment, String title, double[][] xData, double[] yData, String type)
             throws ResultsException {
 
         try {
@@ -158,7 +158,7 @@ public class Results {
         }
     }
 
-    public static void plot(Experiment experiment)
+    public static void plot(GDExperiment experiment)
             throws ResultsException {
         try {
             experiment.graph.plot();

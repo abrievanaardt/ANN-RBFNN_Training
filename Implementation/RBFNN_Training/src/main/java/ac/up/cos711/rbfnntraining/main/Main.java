@@ -10,19 +10,16 @@ import ac.up.cos711.rbfnntraining.data.Graph;
 import ac.up.cos711.rbfnntraining.data.util.GraphException;
 import ac.up.cos711.rbfnntraining.data.util.IncorrectFileFormatException;
 import ac.up.cos711.rbfnntraining.data.util.StudyLogFormatter;
-import ac.up.cos711.rbfnntraining.function.Identity;
-import ac.up.cos711.rbfnntraining.function.util.NotAFunctionException;
-import ac.up.cos711.rbfnntraining.neuralnet.util.FFNeuralNetBuilder;
-import ac.up.cos711.rbfnntraining.neuralnet.util.ZeroNeuronException;
+import ac.up.cos711.rbfnntraining.experiment.GDExperiment;
 import java.io.FileNotFoundException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import ac.up.cos711.rbfnntraining.neuralnet.IRBFNeuralNet;
 import ac.up.cos711.rbfnntraining.neuralnet.RBFNeuralNetTest;
 import ac.up.cos711.rbfnntraining.neuralnet.training.GradientDescent;
 import ac.up.cos711.rbfnntraining.neuralnet.util.ThresholdOutOfBoundsException;
 import ac.up.cos711.rbfnntraining.util.UnequalArgsDimensionException;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.logging.FileHandler;
@@ -41,47 +38,38 @@ public class Main {
         String PATH_PREFIX = "ac/up/cos711/rbfnntraining/data/";
         String EXT = ".nsds";
 
+        int simulations = 3;
+        int epochs = 300;
+        double acceptableError = 0.00000001;
+        double w_l = 0.02;
+        double u_l = 0.02;
+        double sigma_l = 0.02;
+        double dmax = 1;
+        double rigor = 0.15;
+
         try {
             setupLogging();
-            String[] datasetNames = new String[]{
-//                "cancer", 
-                "diabetes",
-                            "glass",
-                            "heart",
-//                            "iris"
-            };
-
-            int numCentres = 15;
-            double d_max = 1;
-            int maxEpochs = 1000;
-
-            for (int i = 0; i < datasetNames.length; i++) {
-                Dataset dataset = Dataset
-                        .fromFile(PATH_PREFIX
-                                + "/" + datasetNames[i]
-                                + EXT);
-                dataset.setDatasetName(datasetNames[i]);
-                List<Dataset> datasets = dataset.split(0.6, 0.3, 0.1);
-                RBFNeuralNetTest network = new RBFNeuralNetTest(dataset.getInputCount(), numCentres, dataset.getTargetCount());
-                GradientDescent gd = new GradientDescent(0.00000001, 0.02, 0.02, 0.02, d_max, 0.2, maxEpochs);
-
-                gd.train(network, datasets.get(0), datasets.get(1));
-
-               Graph graph = new Graph("Plots", "Test", "Epoch", "TrainingError", "", 2);
-               graph.addPlot("Training", gd.getEpochs(), gd.getTrainingErrorHistory(), "line");
-               graph.addPlot("Generalise", gd.getEpochs(), gd.getValidationErrorHistory(), "line");
-               graph.plot();
+            for (int i = 2; i <= 15; i++) {
+                /**
+                 *
+                 * @param _numSim
+                 * @param _maxEpoch
+                 * @param _numCentres
+                 * @param _acceptableTError
+                 * @param w_learningRate
+                 * @param u_learningRate
+                 * @param sigma_learningRate
+                 * @param d_max
+                 * @param _classificationRigor
+                 */
+                new GDExperiment(simulations, epochs, i, acceptableError, w_l, u_l, sigma_l, dmax, rigor).start();
             }
+
         }
-        catch (FileNotFoundException | IncorrectFileFormatException | ThresholdOutOfBoundsException | UnequalArgsDimensionException ex) {
+        catch (Exception ex) {
             Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
         }
-        catch (IOException ex) {
-            Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
-        }
-        catch (GraphException ex) {
-            Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
-        }
+
     }
 
     private static void setupLogging() throws IOException {

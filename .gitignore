@@ -11,4 +11,4 @@ buildNumber.properties
 /Implementation/RBFNN_Training/log/*.log
 /Implementation/RBFNN_Training/log/*.lck
 /Implementation/RBFNN_Training/log/*.log.lck
-/Implementation/RBFNN_Training/Studies/*
+/Implementation/RBFNN_Training/Experiments/*
