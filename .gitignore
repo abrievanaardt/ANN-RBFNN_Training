@@ -7,3 +7,8 @@ release.properties
 dependency-reduced-pom.xml
 buildNumber.properties
 .mvn/timing.properties
+/Implementation/RBFNN_Training/nbproject/
+/Implementation/RBFNN_Training/log/*.log
+/Implementation/RBFNN_Training/log/*.lck
+/Implementation/RBFNN_Training/log/*.log.lck
+/Implementation/RBFNN_Training/Studies/*
