@@ -1,128 +1,111 @@
 package ac.up.cos711.rbfnntraining.neuralnet;
 
+import ac.up.cos711.rbfnntraining.function.Gaussian;
 import ac.up.cos711.rbfnntraining.util.UnequalArgsDimensionException;
-import ac.up.cos711.rbfnntraining.neuralnet.util.FFNeuralNetConfig;
+import java.util.Arrays;
 
 /**
  * Default implementation of an {@link IRBFNeuralNet}.
  *
  * @author Abrie van Aardt
  */
-public class RBFNeuralNet implements IRBFNeuralNet, Cloneable {
+public class RBFNeuralNet implements IRBFNeuralNet {
 
-    private RBFNeuralNet() {
+    /**
+     * Adds 1 additional input units for bias. Adds 1 additional hidden unit for
+     * bias
+     */
+    public RBFNeuralNet(int _I, int _J, int _K) {
+        I = _I;
+        J = _J;
+        K = _K;
 
-    }
-
-    public RBFNeuralNet(FFNeuralNetConfig config) {
-        layers = new Neuron[config.layers.size()][];
-
-        for (int i = 0; i < layers.length; i++) {
-            layers[i] = new Neuron[config.layers.get(i).neuronCount];
-            for (int j = 0; j < layers[i].length; j++) {
-                layers[i][j] = new Neuron();
-                layers[i][j].setActivationFunction(config.layers.get(i).activationFunction);
-                layers[i][j].setWeightCount(config.layers.get(i).weightCountPerNeuron);
-            }
-        }
+        z = new double[I];
+        //z[I] = 1;//I corresponds to I + 1 in the literature
+        u = new double[J][I];
+        sigma = new double[J];
+        y = new double[J + 1];
+        y[J] = -1;//J corresponds to J + 1 in the literature
+        w = new double[K][J + 1];
+        o = new double[K];
     }
 
     @Override
     public double[] classify(double... inputPattern) throws UnequalArgsDimensionException {
-        double[] tempInputPattern;
-        double[] tempOutputPattern;
+        if (inputPattern.length != I)
+            throw new UnequalArgsDimensionException();
 
-        //input pattern dimension must match number of input neurons
-        if (inputPattern.length != layers[0].length)
-            throw new UnequalArgsDimensionException("Input pattern dimension does not match number of input neurons.");
+        //assign input pattern to Z vector
+        System.arraycopy(inputPattern, 0, z, 0, I);
 
-        //set output pattern length to number of neurons in this layer
-        tempOutputPattern = new double[inputPattern.length];
-
-        //feed inputPattern individually to neurons in the input layer
-        for (int i = 0; i < inputPattern.length; i++) {
-            tempOutputPattern[i] = layers[0][i].feed(inputPattern[i]);
+        //activate each RBF (hidden unit)
+        for (int j = 0; j < J; j++) {
+            y[j] = new Gaussian().evaluate(distanceBetweenVectors(z, u[j]), sigma[j]);
         }
 
-        //current output becomes the input for the next layer
-        tempInputPattern = tempOutputPattern;
-
-        for (int i = 1; i < layers.length; i++) {
-            //set output pattern length to number of neurons in current layer
-            tempOutputPattern = new double[layers[i].length];
-            //feed input pattern to all neurons in current layer
-            for (int j = 0; j < tempOutputPattern.length; j++) {
-                tempOutputPattern[j] = layers[i][j].feed(tempInputPattern);
-            }
-            tempInputPattern = tempOutputPattern;
+        //activate each output unit
+        for (int k = 0; k < K; k++) {
+            o[k] = sumProductVectors(w[k], y);
         }
 
-        return tempOutputPattern;
+        return Arrays.copyOf(o, o.length);
     }
 
     @Override
     public int getDimensionality() {
-        int dim = 0;
-        for (int i = 0; i < layers.length; i++) {
-            for (int j = 0; j < layers[i].length; j++) {
-                dim += layers[i][j].getWeightCount();
-            }
-        }
-        return dim;
+        //doubt I'll need this
+        return 0;
     }
 
     @Override
     public double[] getWeightVector() {
-        double[] weightVector = new double[getDimensionality()];
-        int weightVectorIndex = 0;
-        for (int i = 0; i < layers.length; i++) {
-            for (int j = 0; j < layers[i].length; j++) {
-                for (int k = 0; k < layers[i][j].getWeightCount(); k++) {
-                    weightVector[weightVectorIndex++] = layers[i][j].getWeightAt(k);
-                }
-            }
-        }
-        return weightVector;
+        //rethink
+        return null;
     }
 
     @Override
     public void setWeightVector(double... _weightVector) throws UnequalArgsDimensionException {
-        if (_weightVector.length != getDimensionality())
-            throw new UnequalArgsDimensionException("Length of weight vector does not match the network dimensionality.");
-
-        int weightVectorIndex = 0;
-        for (int i = 0; i < layers.length; i++) {
-            for (int j = 0; j < layers[i].length; j++) {
-                for (int k = 0; k < layers[i][j].getWeightCount(); k++) {
-                    layers[i][j].setWeight(k, _weightVector[weightVectorIndex++]);
-                }
-            }
-        }
+        //won't need this
     }
 
-    @Override
-    public Neuron[][] getNetworkLayers() {
-        //handle with care, no pun intended
-        return layers;
-    }
+    /**
+     * Euclidean distance between two vectors
+     *
+     * @return distance
+     */
+    public double distanceBetweenVectors(double[] v1, double[] v2) {
+        double distance = 0;
 
-    @Override
-    public IRBFNeuralNet clone() {
-        Neuron[][] clonedLayers = new Neuron[layers.length][];
-
-        for (int i = 0; i < clonedLayers.length; i++) {
-            clonedLayers[i] = new Neuron[layers[i].length];
-            for (int j = 0; j < layers[i].length; j++) {
-                clonedLayers[i][j] = layers[i][j].clone();
-            }
+        for (int i = 0; i < v1.length; i++) {
+            distance += Math.pow(v2[i] - v1[i], 2);
         }
 
-        RBFNeuralNet n = new RBFNeuralNet();
-        n.layers = clonedLayers;
-
-        return n;
+        return Math.sqrt(distance);
     }
 
-    private Neuron[][] layers;
+    /**
+     * Sum product of two vectors
+     *
+     * return sum product
+     */
+    private double sumProductVectors(double[] v1, double[] v2) {
+        double sumProduct = 0;
 
+        for (int i = 0; i < v1.length; i++) {
+            sumProduct += v1[i] * v2[i];
+        }
+
+        return sumProduct;
+    }
+
+    public final int I;
+    public final int J;
+    public final int K;
+
+    public final double[] z;
+    public final double[][] u;
+    public final double[] sigma;
+    public final double[] y;
+    public final double[][] w;
+    public final double[] o;
 }

@@ -3,12 +3,11 @@ package ac.up.cos711.rbfnntraining.experiment;
 import ac.up.cos711.rbfnntraining.data.Dataset;
 import ac.up.cos711.rbfnntraining.data.Graph;
 import ac.up.cos711.rbfnntraining.data.Results;
-import ac.up.cos711.rbfnntraining.function.problem.NetworkError;
 import ac.up.cos711.rbfnntraining.function.problem.RealProblem;
 import ac.up.cos711.rbfnntraining.neuralnet.RBFNeuralNet;
 import ac.up.cos711.rbfnntraining.neuralnet.metric.ClassificationAccuracy;
 import ac.up.cos711.rbfnntraining.neuralnet.metric.DefaultNetworkError;
-import ac.up.cos711.rbfnntraining.neuralnet.training.GradientDescent;
+import ac.up.cos711.rbfnntraining.neuralnet.training.TwoPhase;
 import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Level;
@@ -20,7 +19,7 @@ import java.util.logging.Logger;
  *
  * @author Abrie van Aardt
  */
-public class GDExperiment extends Thread {
+public class TwoPhaseExperiment extends Thread {
 
     /**
      *
@@ -34,8 +33,8 @@ public class GDExperiment extends Thread {
      * @param d_max
      * @param _classificationRigor
      */
-    public GDExperiment(int _numSim, int _maxEpoch, int _numCentres, double _acceptableTError, double w_learningRate, double u_learningRate, double sigma_learningRate, double d_max, double _classificationRigor) {
-        name = "GD_Experiment_" + _numCentres;
+    public TwoPhaseExperiment(int _numSim, int _maxEpoch, int _numCentres, double _acceptableTError, double w_learningRate, double lvq_learningRate, int neighbourhoodRadius, double _classificationRigor) {
+        name = "TwoPhase_Experiment_" + _numCentres;
         path = "Experiment/";
         numSim = _numSim;
         simulations = new double[numSim];
@@ -73,9 +72,8 @@ public class GDExperiment extends Thread {
 
         ACCEPTABLE_TRAINING_ERROR = _acceptableTError;
         w_LEARNING_RATE = w_learningRate;
-        u_LEARNING_RATE = u_learningRate;
-        sigma_LEARNING_RATE = sigma_learningRate;
-        d_MAX = d_max;
+        lvq_LEARNING_RATE = lvq_learningRate;
+        neighbourhood_RADIUS = neighbourhoodRadius;
         MAX_EPOCH = _maxEpoch;
         CLASSIFICATION_RIGOR = _classificationRigor;
     }
@@ -84,15 +82,15 @@ public class GDExperiment extends Thread {
     public void run() {
 
         Logger
-                .getLogger(GDExperiment.class.getName())
+                .getLogger(TwoPhaseExperiment.class.getName())
                 .log(Level.INFO, "...");
 
         Logger
-                .getLogger(GDExperiment.class.getName())
+                .getLogger(TwoPhaseExperiment.class.getName())
                 .log(Level.INFO, "Running experiment: {0}", name);
 
         Logger
-                .getLogger(GDExperiment.class.getName())
+                .getLogger(TwoPhaseExperiment.class.getName())
                 .log(Level.INFO, "Doing {0} simulation(s)", numSim);
 
         try {
@@ -100,7 +98,7 @@ public class GDExperiment extends Thread {
             for (int i = 1; i <= numSim; i++) {
 
                 Logger
-                        .getLogger(GDExperiment.class.getName())
+                        .getLogger(TwoPhaseExperiment.class.getName())
                         .log(Level.INFO, name + " - Simulation {0}", i);
 
                 runSimulation(i);
@@ -111,7 +109,7 @@ public class GDExperiment extends Thread {
 
         }
         catch (Exception e) {
-            Logger.getLogger(GDExperiment.class.getName()).log(Level.SEVERE, "", e);
+            Logger.getLogger(TwoPhaseExperiment.class.getName()).log(Level.SEVERE, "", e);
         }
     }
 
@@ -151,24 +149,24 @@ public class GDExperiment extends Thread {
 
             List<Dataset> dataPartitions = dataset.split(0.7, 0.1, 0.2);
             RBFNeuralNet network = new RBFNeuralNet(dataset.getInputCount(), numCentres, dataset.getTargetCount());
-            GradientDescent gd = new GradientDescent(ACCEPTABLE_TRAINING_ERROR, w_LEARNING_RATE, u_LEARNING_RATE, sigma_LEARNING_RATE, d_MAX, CLASSIFICATION_RIGOR, MAX_EPOCH);
+            TwoPhase twoPhase = new TwoPhase(ACCEPTABLE_TRAINING_ERROR, lvq_LEARNING_RATE, w_LEARNING_RATE, neighbourhood_RADIUS, CLASSIFICATION_RIGOR, MAX_EPOCH);
 
-            gd.train(network, dataPartitions.get(0), dataPartitions.get(1));
+            twoPhase.train(network, dataPartitions.get(0), dataPartitions.get(1));
 
-            trainingErrors[currentSimulation - 1][i] = gd.getTrainingError();
+            trainingErrors[currentSimulation - 1][i] = twoPhase.getTrainingError();
 
             double tempGeneralError = new DefaultNetworkError().measure(network, dataPartitions.get(2));
             double tempAccuracy = new ClassificationAccuracy(CLASSIFICATION_RIGOR).measure(network, dataPartitions.get(2));
             generalErrors[currentSimulation - 1][i] = tempGeneralError;
             accuracies[currentSimulation - 1][i] = tempAccuracy;
 
-            trainingErrors[avgErrorIndex][i] = calculateNewAverage(trainingErrors[avgErrorIndex][i], gd.getTrainingError(), currentSimulation);
+            trainingErrors[avgErrorIndex][i] = calculateNewAverage(trainingErrors[avgErrorIndex][i], twoPhase.getTrainingError(), currentSimulation);
             generalErrors[avgErrorIndex][i] = calculateNewAverage(generalErrors[avgErrorIndex][i], tempGeneralError, currentSimulation);
             accuracies[avgErrorIndex][i] = calculateNewAverage(accuracies[avgErrorIndex][i], tempAccuracy, currentSimulation);
 
             //calculate standard deviation when finalising
-            double[] tempTrainingHist = gd.getTrainingErrorHistory();
-            double[] tempValidationHist = gd.getValidationErrorHistory();
+            double[] tempTrainingHist = twoPhase.getTrainingErrorHistory();
+            double[] tempValidationHist = twoPhase.getValidationErrorHistory();
 
             //update average error histories (errors over epochs)
             for (int j = 0; j < MAX_EPOCH; j++) {
@@ -214,12 +212,12 @@ public class GDExperiment extends Thread {
 
         //graphing the results
         //add a plot for each of the datasets (for now)
-        Results.newGraph(this, path + "/Plots_" + name, "Error vs Epoch", "Epoch", "Error", "", 2);
+        graph = new Graph(path + "/Plots_" + name, "Error vs Epoch", "Epoch", "Error", "", 2);
         for (int i = 0; i < NUM_DATASETS; i++) {
-            Results.addPlot(this, datasetNames[i] + " E_T", epochs, avgTrainingErrorHistories[i], "line lt " + (i + 1));
-            Results.addPlot(this, datasetNames[i] + " E_V", epochs, avgValidationErrorHistories[i], "line dt 2 lt " + (i + 1));
+            graph.addPlot(datasetNames[i] + " E_T", epochs, avgTrainingErrorHistories[i], "line lt " + (i + 1));
+            graph.addPlot(datasetNames[i] + " E_V", epochs, avgValidationErrorHistories[i], "line dt 2 lt " + (i + 1));
         }
-        Results.plot(this);
+        graph.plot();
 
     }
 
@@ -246,9 +244,9 @@ public class GDExperiment extends Thread {
 
     private final double ACCEPTABLE_TRAINING_ERROR;
     private final double w_LEARNING_RATE;
-    private final double u_LEARNING_RATE;
-    private final double sigma_LEARNING_RATE;
-    private final double d_MAX;
+    private final double lvq_LEARNING_RATE;
+    private final int neighbourhood_RADIUS;
+
     private final int MAX_EPOCH;
     private final double CLASSIFICATION_RIGOR;
 

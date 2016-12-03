@@ -46,13 +46,5 @@ public interface IRBFNeuralNet extends Cloneable{
      * @return network dimensionality
      */
     public int getDimensionality();
-
-    /**
-     * Acquires a live reference to the underlying neurons in the network. This
-     * facilitates learning algorithms such as {@link BackPropogation} which
-     * requires knowledge of the network topology.
-     *
-     * @return Zagged 2D array of Neurons
-     */
-    public Neuron[][] getNetworkLayers();           
+            
 }

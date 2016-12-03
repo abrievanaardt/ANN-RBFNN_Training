@@ -3,7 +3,7 @@ package ac.up.cos711.rbfnntraining.neuralnet.training;
 import ac.up.cos711.rbfnntraining.data.Dataset;
 import ac.up.cos711.rbfnntraining.util.UnequalArgsDimensionException;
 import ac.up.cos711.rbfnntraining.neuralnet.IRBFNeuralNet;
-import ac.up.cos711.rbfnntraining.neuralnet.RBFNeuralNetTest;
+import ac.up.cos711.rbfnntraining.neuralnet.RBFNeuralNet;
 
 /**
  * Interface to the functionality to train a fully connected feed forward neural
@@ -28,6 +28,6 @@ public interface IFFNeuralNetTrainer {
      * @param validationset
      * @throws UnequalArgsDimensionException
      */
-    public void train(RBFNeuralNetTest network, Dataset trainingset, Dataset validationset)
+    public void train(RBFNeuralNet network, Dataset trainingset, Dataset validationset)
             throws UnequalArgsDimensionException;
 }

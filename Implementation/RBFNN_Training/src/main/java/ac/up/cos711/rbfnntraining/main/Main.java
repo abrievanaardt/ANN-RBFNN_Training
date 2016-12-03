@@ -5,22 +5,12 @@
  */
 package ac.up.cos711.rbfnntraining.main;
 
-import ac.up.cos711.rbfnntraining.data.Dataset;
-import ac.up.cos711.rbfnntraining.data.Graph;
-import ac.up.cos711.rbfnntraining.data.util.GraphException;
-import ac.up.cos711.rbfnntraining.data.util.IncorrectFileFormatException;
 import ac.up.cos711.rbfnntraining.data.util.StudyLogFormatter;
 import ac.up.cos711.rbfnntraining.experiment.GDExperiment;
-import java.io.FileNotFoundException;
+import ac.up.cos711.rbfnntraining.experiment.TwoPhaseExperiment;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import ac.up.cos711.rbfnntraining.neuralnet.RBFNeuralNetTest;
-import ac.up.cos711.rbfnntraining.neuralnet.training.GradientDescent;
-import ac.up.cos711.rbfnntraining.neuralnet.util.ThresholdOutOfBoundsException;
-import ac.up.cos711.rbfnntraining.util.UnequalArgsDimensionException;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.logging.FileHandler;
 import java.util.logging.Formatter;
@@ -35,10 +25,8 @@ public class Main {
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        String PATH_PREFIX = "ac/up/cos711/rbfnntraining/data/";
-        String EXT = ".nsds";
 
-        int simulations = 3;
+        int simulations = 30;
         int epochs = 300;
         double acceptableError = 0.00000001;
         double w_l = 0.02;
@@ -47,6 +35,10 @@ public class Main {
         double dmax = 1;
         double rigor = 0.15;
 
+        //this is an initial rate, it's decayed with epochs
+        double lvq_l = 0.02;
+        //neighbourhood radius, 0 is used
+        int n_Radius = 0;
         try {
             setupLogging();
             for (int i = 2; i <= 15; i++) {
@@ -62,7 +54,8 @@ public class Main {
                  * @param d_max
                  * @param _classificationRigor
                  */
-                new GDExperiment(simulations, epochs, i, acceptableError, w_l, u_l, sigma_l, dmax, rigor).start();
+//                new GDExperiment(simulations, epochs, i, acceptableError, w_l, u_l, sigma_l, dmax, rigor).start();
+                new TwoPhaseExperiment(simulations, epochs, i, acceptableError, w_l, lvq_l, n_Radius, rigor).start();
             }
 
         }

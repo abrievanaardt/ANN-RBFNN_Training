@@ -12,20 +12,22 @@ import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import ac.up.cos711.rbfnntraining.neuralnet.RBFNeuralNet;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
- * Implements the Gradient Descent Learning algorithm for RBFNN
+ * Implements the Two-Phase Learning algorithm for RBFNN
  *
  * @author Abrie van Aardt
  */
-public class GradientDescent implements IFFNeuralNetTrainer {
+public class TwoPhase implements IFFNeuralNetTrainer {
 
-    public GradientDescent() {
+    public TwoPhase() {
         ACCEPTABLE_TRAINING_ERROR = 0.1;//todo: find good value
-        w_LEARNING_RATE = 0.01;//todo: find good value        
-        u_LEARNING_RATE = 0.01;//todo: find good value 
-        d_MAX = 0.5;//todo: probably have to initialise this taking number of RBFs and input range in account, try range 2/j
-        sigma_LEARNING_RATE = 0.01;//todo: find good value        
+        w_LEARNING_RATE = 0.01;//todo: find good value   
+        init_LVQ_LEARNING_RATE = 0.01;
+        neighbourhood_RADIUS = 1;
         MAX_EPOCH = 15;
         defaultNetworError = new DefaultNetworkError();
         classificationAccuracy = new ClassificationAccuracy();
@@ -41,19 +43,16 @@ public class GradientDescent implements IFFNeuralNetTrainer {
     /**
      *
      * @param _acceptableTError
+     * @param lvq_learningRate
      * @param w_learningRate
-     * @param u_learningRate
-     * @param sigma_learningRate
      * @param _classificationRigor
+     * @param _maxEpoch
      * @throws ThresholdOutOfBoundsException
      */
-    public GradientDescent(double _acceptableTError, double w_learningRate, double u_learningRate, double sigma_learningRate, double d_max, double _classificationRigor, int _maxEpoch)
+    public TwoPhase(double _acceptableTError, double lvq_learningRate, double w_learningRate, int neighbourhood_Radius, double _classificationRigor, int _maxEpoch)
             throws ThresholdOutOfBoundsException {
         ACCEPTABLE_TRAINING_ERROR = _acceptableTError;
         w_LEARNING_RATE = w_learningRate;
-        u_LEARNING_RATE = u_learningRate;
-        sigma_LEARNING_RATE = sigma_learningRate;
-        d_MAX = d_max;
         MAX_EPOCH = _maxEpoch;
         defaultNetworError = new DefaultNetworkError();
         classificationAccuracy = new ClassificationAccuracy(_classificationRigor);
@@ -62,8 +61,9 @@ public class GradientDescent implements IFFNeuralNetTrainer {
         trainingAccHistory = new double[MAX_EPOCH];
         validationAccHistory = new double[MAX_EPOCH];
         epochs = new double[MAX_EPOCH];
-
-       
+        init_LVQ_LEARNING_RATE = lvq_learningRate;
+        lvq_LEARNING_RATE = init_LVQ_LEARNING_RATE;
+        neighbourhood_RADIUS = neighbourhood_Radius;
     }
 
     @Override
@@ -86,7 +86,18 @@ public class GradientDescent implements IFFNeuralNetTrainer {
         int epoch = 0;
         long duration = System.nanoTime();
 
+        neighbourhood_RADIUS = 0;//todo: adjust possibly
+
         do {
+            //reset pattern clusters at the start of the epoch
+            patternClusters = new ArrayList<>(network.J);
+
+            //initialise patternClusters
+            //can just index from here on 
+            for (int j = 0; j < network.J; j++) {
+                patternClusters.add(new ArrayList<>());
+            }
+
             ++epoch;
 
             //prevent memorisation of pattern order
@@ -99,8 +110,12 @@ public class GradientDescent implements IFFNeuralNetTrainer {
                 targets = p.getTargets();
                 outputs = network.classify(p.getInputs());
                 trainingError += DefaultNetworkError.errorForPattern(targets, outputs);
-                adjustWeights(network, targets, outputs);
+                //todo: applied in succession within the same poch, might have to split up
+                learningVectorQuantiser(network, p.getInputs());
+                gradientDescent(network, targets, outputs);
             }
+
+            updateSigmas(network);
 
             trainingError /= (trainingset.size() * outputs.length);
 
@@ -126,6 +141,10 @@ public class GradientDescent implements IFFNeuralNetTrainer {
                                 String.format("%.4f", stdDevValidationError)
                             }
                     );
+
+            //decay the LVQ-I learning rate
+            //todo: Tau is 1, see if other values work better
+            lvq_LEARNING_RATE = init_LVQ_LEARNING_RATE * Math.pow(Math.E, -(epoch / (0.1 * MAX_EPOCH)));
         }
         while (epoch < MAX_EPOCH);
 
@@ -141,6 +160,147 @@ public class GradientDescent implements IFFNeuralNetTrainer {
                             String.format("%.4f", validationError)
                         }
                 );
+    }
+
+    /**
+     * Initialize all weights
+     *
+     * @param network
+     */
+    private void initialise(RBFNeuralNet network, Dataset trainingset) {
+        Iterator<Pattern> patterns = trainingset.iterator();
+        int numPatterns = trainingset.size();
+        List<Double> allInputsInComponentForm = new ArrayList<>(network.I * numPatterns);
+
+        //calculate average of inputs in the training set        
+        for (int n = 1; n <= numPatterns; n++) {
+            Pattern pattern = patterns.next();
+            double[] inputs = pattern.getInputs();
+
+            for (int j = 0; j < network.J; j++) {
+                for (int i = 0; i < network.I; i++) {
+                    //set centre vector equal to running average
+                    network.u[j][i] = calculateNewAverage(network.u[j][i], inputs[i], n);
+                }
+            }
+
+            //extract input vectors component columns
+            // to be used to initialise widths as stdDev
+            for (int i = 0; i < network.I; i++) {
+                allInputsInComponentForm.add(inputs[i]);
+            }
+        }
+
+        //calculate standard deviation of the input
+        //the second parameter to calculateSampleStdDev() is an average
+        //the average here is the average in all dimensions of the input
+        //any Uji can be used since they have been set to the average of the input
+        double tempStdDev = calculateSampleStdDev(allInputsInComponentForm.stream().mapToDouble(d -> d).toArray(), Arrays.stream(network.u[0]).average().getAsDouble());
+
+        //set all widths to standard deviation of inputs
+        for (int j = 0; j < network.J; j++) {
+            network.sigma[j] = tempStdDev;
+        }
+
+        for (int k = 0; k < network.K; k++) {
+            for (int j = 0; j < network.J + 1; j++) {
+                //initialise the hidden-to-output weights
+                network.w[k][j] = rand.nextDouble() * 2.0 / Math.sqrt(network.J + 1.0) - 1.0 / Math.sqrt(network.J + 1);
+            }
+        }
+    }
+
+    /**
+     * Adjusts only the hidden-to-output weights using gradient descent
+     *
+     * @param network
+     * @param targets
+     * @param outputs
+     */
+    private void gradientDescent(RBFNeuralNet network, double[] t, double[] o) {
+        for (int k = 0; k < network.K; k++) {
+            for (int j = 0; j < network.J + 1; j++) {
+                //adjust hidden-to-output weights
+                network.w[k][j] += w_LEARNING_RATE * ((t[k] - o[k]) * network.y[j]);
+            }
+        }
+    }
+
+    /**
+     * Adjusts only the RBF centres and widths by performing clustering on the
+     * input patterns
+     *
+     * @param network
+     * @param trainingset
+     * @param validationset
+     */
+    private void learningVectorQuantiser(RBFNeuralNet network, double[] z) {
+
+        double minDistance = Double.MAX_VALUE;
+        int winnerIndex = 0;
+
+        for (int j = 0; j < network.J; j++) {
+            double dist = network.distanceBetweenVectors(z, network.u[j]);
+
+            if (dist < minDistance) {
+                minDistance = dist;
+                winnerIndex = j;
+            }
+        }
+
+        //update centers of winner and neighbours
+        for (int j = 0; j < network.J; j++) {
+            if (Math.abs(j - winnerIndex) <= neighbourhood_RADIUS) {
+                for (int i = 0; i < network.I; i++) {
+                    network.u[j][i] += lvq_LEARNING_RATE * (z[i] - network.u[j][i]);
+                }
+            }
+        }
+
+        //add pattern to winning unit cluster
+        patternClusters.get(winnerIndex).add(z);
+    }
+
+    private void updateSigmas(RBFNeuralNet network) {
+        for (int j = 0; j < network.J; j++) {
+            List<double[]> patterns = patternClusters.get(j);
+            
+            //set the average to zero
+            network.sigma[j] = 0;
+
+            //calculate the new average distance between centre j and patterns that belong to it
+            for (int p = 1; p <= patterns.size(); p++) {
+                network.sigma[j] = calculateNewAverage(network.sigma[j], network.distanceBetweenVectors(patterns.get(p - 1), network.u[j]), p);
+            }
+
+        }
+    }
+
+    /**
+     * Calculates the running average assuming indexing starts at
+     *
+     * @param oldAvg
+     * @param newValue
+     * @param currentNumber
+     * @return new average
+     */
+    protected double calculateNewAverage(double oldAvg, double newValue, int currentNumber) {
+        if (currentNumber == 0)
+            return 0;
+        else
+            return (oldAvg * (currentNumber - 1) + newValue) / currentNumber;
+    }
+
+    /**
+     * Calculates the sample standard deviation of the array of values
+     *
+     * @param values
+     * @param avg
+     * @return sample standard deviation
+     */
+    protected double calculateSampleStdDev(double[] values, double avg) {
+        double stdDev = Arrays.stream(values).map(i -> Math.pow(i - avg, 2)).sum() / (values.length - 1);
+        return Math.sqrt(stdDev);
     }
 
     public double getValidationError() {
@@ -166,74 +326,9 @@ public class GradientDescent implements IFFNeuralNetTrainer {
     public double[] getValidationAccHistory() {
         return validationAccHistory;
     }
-    
-    public double[] getEpochs(){
+
+    public double[] getEpochs() {
         return epochs;
-    }
-
-    /**
-     * Initialize all weights
-     *
-     * @param network
-     */
-    private void initialise(RBFNeuralNet network, Dataset trainingset) {
-        trainingset.shuffle();
-        Iterator<Pattern> patterns = trainingset.iterator();
-        for (int j = 0; j < network.J; j++) {
-            Pattern pattern = patterns.next();
-            double[] inputs = pattern.getInputs();
-
-            //set centre vector equal to the input vector
-            System.arraycopy(inputs, 0, network.u[j], 0, inputs.length);
-
-            //initialise the input bias
-            //network.u[j][network.I] = rand.nextDouble() * 2.0 - 1.0;
-            //calculate width for j
-            network.sigma[j] = d_MAX / Math.sqrt(network.J);
-        }
-
-        for (int k = 0; k < network.K; k++) {
-            for (int j = 0; j < network.J + 1; j++) {
-                //initialise the hidden-to-output weights
-                network.w[k][j] = rand.nextDouble() * 2.0 / Math.sqrt(network.J + 1.0) - 1.0 / Math.sqrt(network.J + 1);
-            }
-        }
-    }
-
-    /**
-     * Adjust all the weights in the NN
-     *
-     * @param network
-     * @param targets
-     * @param outputs
-     */
-    private void adjustWeights(RBFNeuralNet network, double[] t, double[] o) {
-        for (int k = 0; k < network.K; k++) {
-            for (int j = 0; j < network.J + 1; j++) {
-                //adjust hidden-to-output weights
-                network.w[k][j] += w_LEARNING_RATE * ((t[k] - o[k]) * network.y[j]);
-            }
-        }
-        for (int j = 0; j < network.J; j++) {
-            //common calculation between centre and width updates, reuse
-            double partialSum = 0;
-            for (int k = 0; k < network.K; k++) {
-                partialSum += (t[k] - o[k]) * network.w[k][j];
-            }
-
-            for (int i = 0; i < network.I; i++) {
-                //adjust centre vectors
-                network.u[j][i] += u_LEARNING_RATE * (1.0 / Math.pow(network.sigma[j], 2)) * (network.z[i] - network.u[j][i]) * network.y[j] * partialSum;
-            }
-
-            double distanceZtoU = 0;
-            for (int i = 0; i < network.I; i++) {
-                distanceZtoU += Math.pow(network.z[i] - network.u[j][i], 2);
-            }
-
-            //adjust width vector
-            network.sigma[j] += sigma_LEARNING_RATE * (1.0 / Math.pow(network.sigma[j], 3)) * distanceZtoU * network.y[j] * partialSum;
-        }
     }
 
     private final Random rand = new Random(System.nanoTime());
@@ -241,9 +336,9 @@ public class GradientDescent implements IFFNeuralNetTrainer {
     private final INetworkError classificationAccuracy;//todo: could decide to use this as stopping condition
     private final double ACCEPTABLE_TRAINING_ERROR;
     private final double w_LEARNING_RATE;
-    private final double u_LEARNING_RATE;
-    private final double sigma_LEARNING_RATE;
-    private final double d_MAX;
+    private final double init_LVQ_LEARNING_RATE;
+    private double lvq_LEARNING_RATE;
+    private int neighbourhood_RADIUS;
     private final int MAX_EPOCH;
     private double trainingError;
     private double validationError;
@@ -252,4 +347,7 @@ public class GradientDescent implements IFFNeuralNetTrainer {
     private double[] trainingAccHistory;
     private double[] validationAccHistory;
     private double[] epochs;
+
+    //Two-Phase params
+    private List<List<double[]>> patternClusters;
 }
